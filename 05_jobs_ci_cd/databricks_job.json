@@ -1,0 +1,124 @@
+{
+  "job_id": 123456789,
+  "name": "Airlines ETL Pipeline",
+  "description": "Daily ETL pipeline for airlines data processing",
+  "timeout_seconds": 3600,
+  "max_concurrent_runs": 1,
+  "format": "MULTI_TASK",
+  "tasks": [
+    {
+      "task_key": "data_ingestion",
+      "description": "Load raw airlines data",
+      "notebook_task": {
+        "notebook_path": "/Users/nithinyanna/Downloads/databricks/01_loading/notebook_2",
+        "base_parameters": {
+          "input_path": "/databricks-datasets/airlines",
+          "output_path": "/delta/airlines_bronze"
+        }
+      },
+      "new_cluster": {
+        "spark_version": "13.3.x-scala2.12",
+        "node_type_id": "i3.xlarge",
+        "num_workers": 2,
+        "spark_conf": {
+          "spark.databricks.delta.optimizeWrite.enabled": "true",
+          "spark.databricks.delta.autoCompact.enabled": "true"
+        }
+      },
+      "libraries": [
+        {
+          "pypi": {
+            "package": "delta-spark==2.4.0"
+          }
+        }
+      ]
+    },
+    {
+      "task_key": "data_transformation",
+      "description": "Transform and clean data",
+      "notebook_task": {
+        "notebook_path": "/Users/nithinyanna/Downloads/databricks/07_data_pipeline/bronze_silver_gold",
+        "base_parameters": {
+          "bronze_path": "/delta/airlines_bronze",
+          "silver_path": "/delta/airlines_silver",
+          "gold_path": "/delta/airlines_gold"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "data_ingestion"
+        }
+      ],
+      "existing_cluster_id": "{{cluster_id}}"
+    },
+    {
+      "task_key": "data_validation",
+      "description": "Validate data quality",
+      "notebook_task": {
+        "notebook_path": "/Users/nithinyanna/Downloads/databricks/06_monitoring_logging/data_quality_checks",
+        "base_parameters": {
+          "table_path": "/delta/airlines_gold"
+        }
+      },
+      "depends_on": [
+        {
+          "task_key": "data_transformation"
+        }
+      ],
+      "existing_cluster_id": "{{cluster_id}}"
+    }
+  ],
+  "email_notifications": {
+    "on_start": ["admin@company.com"],
+    "on_success": ["data-team@company.com"],
+    "on_failure": ["admin@company.com", "data-team@company.com"]
+  },
+  "webhook_notifications": {
+    "on_start": [
+      {
+        "id": "webhook-1",
+        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+      }
+    ],
+    "on_success": [
+      {
+        "id": "webhook-1",
+        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+      }
+    ],
+    "on_failure": [
+      {
+        "id": "webhook-1",
+        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+      }
+    ]
+  },
+  "schedule": {
+    "quartz_cron_expression": "0 0 6 * * ?",
+    "timezone_id": "UTC",
+    "pause_status": "UNPAUSED"
+  },
+  "access_control_list": [
+    {
+      "user_name": "admin@company.com",
+      "permission_level": "CAN_MANAGE"
+    },
+    {
+      "user_name": "data-engineer@company.com",
+      "permission_level": "CAN_RUN"
+    }
+  ],
+  "run_as": {
+    "service_principal_name": "databricks-job-sp"
+  },
+  "git_source": {
+    "git_url": "https://github.com/nithinyanna10/databricks.git",
+    "git_branch": "main",
+    "git_provider": "gitHub"
+  },
+  "tags": {
+    "environment": "production",
+    "team": "data-engineering",
+    "pipeline": "airlines-etl"
+  }
+}

@@ -1,0 +1,124 @@
+name: Deploy to Databricks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+        
+    - name: Install Databricks CLI
+      run: |
+        pip install databricks-cli
+        
+    - name: Configure Databricks CLI
+      run: |
+        echo "${{ secrets.DATABRICKS_HOST }}" | databricks configure --token
+      env:
+        DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        
+    - name: Deploy notebooks
+      run: |
+        # Deploy notebooks to Databricks workspace
+        databricks workspace import-dir \
+          --source-dir ./01_loading \
+          --target-path /Shared/01_loading \
+          --overwrite
+          
+        databricks workspace import-dir \
+          --source-dir ./02_delta_lake \
+          --target-path /Shared/02_delta_lake \
+          --overwrite
+          
+        databricks workspace import-dir \
+          --source-dir ./07_data_pipeline \
+          --target-path /Shared/07_data_pipeline \
+          --overwrite
+          
+    - name: Update job configuration
+      run: |
+        # Update job with new notebook paths
+        databricks jobs reset \
+          --job-id ${{ secrets.DATABRICKS_JOB_ID }} \
+          --json-file ./05_jobs_ci_cd/databricks_job.json
+          
+    - name: Run job validation
+      run: |
+        # Validate job configuration
+        databricks jobs get --job-id ${{ secrets.DATABRICKS_JOB_ID }}
+        
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ ${{ job.status }} == 'success' ]; then
+          echo "✅ Deployment successful"
+        else
+          echo "❌ Deployment failed"
+        fi
+
+  test:
+    runs-on: ubuntu-latest
+    needs: deploy
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+        
+    - name: Install test dependencies
+      run: |
+        pip install pytest databricks-cli
+        
+    - name: Run notebook tests
+      run: |
+        # Run basic validation tests
+        python -m pytest tests/ -v
+        
+    - name: Validate job configuration
+      run: |
+        # Validate job JSON syntax
+        python -c "import json; json.load(open('./05_jobs_ci_cd/databricks_job.json'))"
+        echo "✅ Job configuration is valid JSON"
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Run security scan
+      run: |
+        # Scan for sensitive information
+        if grep -r "password\|secret\|key" --include="*.py" --include="*.json" .; then
+          echo "❌ Potential sensitive information found"
+          exit 1
+        else
+          echo "✅ No sensitive information detected"
+        fi
+        
+    - name: Validate file permissions
+      run: |
+        # Check for overly permissive files
+        find . -type f -perm 777 -not -path "./.git/*" | head -10
+        if [ $? -eq 0 ]; then
+          echo "⚠️  Some files have overly permissive permissions"
+        else
+          echo "✅ File permissions are appropriate"
+        fi

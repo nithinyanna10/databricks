@@ -1,0 +1,41 @@
+{
+  "name": "Simple Airlines Pipeline",
+  "description": "A simple pipeline to test the complete data flow",
+  "timeout_seconds": 1800,
+  "max_concurrent_runs": 1,
+  "format": "SINGLE_TASK",
+  "tasks": [
+    {
+      "task_key": "complete_pipeline",
+      "description": "Run the complete pipeline test",
+      "notebook_task": {
+        "notebook_path": "/Shared/complete_pipeline_test",
+        "base_parameters": {
+          "input_path": "/databricks-datasets/airlines",
+          "bronze_path": "/delta/airlines_bronze",
+          "silver_path": "/delta/airlines_silver",
+          "gold_path": "/delta/airlines_gold"
+        }
+      },
+      "new_cluster": {
+        "spark_version": "13.3.x-scala2.12",
+        "node_type_id": "i3.xlarge",
+        "num_workers": 1,
+        "spark_conf": {
+          "spark.databricks.delta.optimizeWrite.enabled": "true",
+          "spark.databricks.delta.autoCompact.enabled": "true"
+        }
+      }
+    }
+  ],
+  "email_notifications": {
+    "on_start": [],
+    "on_success": [],
+    "on_failure": []
+  },
+  "schedule": {
+    "quartz_cron_expression": "0 0 9 * * ?",
+    "timezone_id": "UTC",
+    "pause_status": "PAUSED"
+  }
+}
